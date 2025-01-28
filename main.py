@@ -12,7 +12,6 @@ import time
 USERNAME = "601200"
 PASSWORD = "s2032ab15"
 
-
 # Function to initialize Firefox WebDriver
 def initialize_driver():
     # Set up Firefox options
@@ -24,44 +23,20 @@ def initialize_driver():
     driver = webdriver.Firefox(service=service, options=options)
     return driver
 
+# Function to handle human verification
+def handle_human_verification(driver):
+    try:
+        # Wait for the verification checkbox to appear
+        wait = WebDriverWait(driver, 5)
+        verification_checkbox = wait.until(EC.presence_of_element_located((By.XPATH, "//div/label/input")))
 
-# Function to scrape products from a category
-def scrape_category_products(driver, category_url):
-    driver.get(category_url)
-    wait = WebDriverWait(driver, 10)
-
-    # Wait for product cards to load
-    product_cards = wait.until(EC.presence_of_all_elements_located(
-        (By.CLASS_NAME, "col.d-flex.tgm-gal-box.mb-3")
-    ))
-
-    products = []
-    for card in product_cards:
-        try:
-            # Extract product name
-            product_name = card.find_element(By.CLASS_NAME, "card-title.cut-text.pe-1.mb-0").find_element(By.CLASS_NAME,
-                                                                                                          "green-color").text.strip()
-
-            # Extract selling price
-            selling_price = card.find_element(By.CLASS_NAME, "card-text.fw-bold1.mb-0").text.strip()
-
-            # Extract price without tax
-            price_without_tax = card.find_element(By.CLASS_NAME,
-                                                  "card-text.gal-preis-ek.gal_price_color.fw-600_1.fw-bold.mb-0").find_element(
-                By.TAG_NAME, "span").text.strip()
-
-            # Append product details
-            products.append({
-                "Name": product_name,
-                "Selling Price": selling_price,
-                "Price Without Tax": price_without_tax
-            })
-        except Exception as e:
-            print(f"Error extracting product: {e}")
-            continue
-
-    return products
-
+        # Click the checkbox
+        verification_checkbox.click()
+        print("Clicked human verification checkbox!")
+        time.sleep(2)  # Wait briefly for the verification to process
+    except Exception as e:
+        # If the verification checkbox is not present, continue as normal
+        print(f"No human verification checkbox found or other error: {e}")
 
 # Main script
 try:
@@ -71,11 +46,18 @@ try:
     # Open the website
     driver.get("https://mike.larsson.cz/")
 
+    # Continuously check for human verification
+    handle_human_verification(driver)
+
     # Wait for the accept cookies button to be present and click it
     wait = WebDriverWait(driver, 10)
+    handle_human_verification(driver)  # Watch for verification before accepting cookies
     accept_cookies_button = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "btnAcceptAll")))
     accept_cookies_button.click()
     print("Accepted cookies")
+
+    # Continuously check for human verification
+    handle_human_verification(driver)
 
     # Find the username and password input fields
     username_field = wait.until(EC.presence_of_element_located((By.NAME, "mcustno")))
@@ -90,6 +72,9 @@ try:
     password_field.send_keys(Keys.RETURN)
     print("Submitted login form")
 
+    # Continuously check for human verification
+    handle_human_verification(driver)
+
     # Wait for the page to refresh and load the new look
     time.sleep(5)
 
@@ -97,6 +82,9 @@ try:
     checkbox = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "form-check-input.shadow-none")))
     checkbox.click()
     print("Clicked the checkbox!")
+
+    # Continuously check for human verification
+    handle_human_verification(driver)
 
     # Locate all <a> elements with the specified class name
     links = wait.until(EC.presence_of_all_elements_located(
@@ -114,10 +102,41 @@ try:
     all_products = []
     for category in categories:
         print(f"Scraping category: {category['name']} -> {category['url']}")
-        products = scrape_category_products(driver, category['url'])
-        for product in products:
-            product["Category"] = category["name"]  # Add category name to each product
-        all_products.extend(products)
+
+        # Navigate to the category page
+        driver.get(category['url'])
+        time.sleep(3)  # Ensure the page has fully loaded
+
+        # Handle human verification dynamically
+        handle_human_verification(driver)
+
+        # Wait for product cards to load
+        product_cards = wait.until(EC.presence_of_all_elements_located(
+            (By.CLASS_NAME, "col.d-flex.tgm-gal-box.mb-3")
+        ))
+
+        # Scrape product details from the current page
+        for card in product_cards:
+            try:
+                # Extract product name
+                product_name = card.find_element(By.CLASS_NAME, "card-title.cut-text.pe-1.mb-0").find_element(By.CLASS_NAME, "green-color").text.strip()
+
+                # Extract selling price
+                selling_price = card.find_element(By.CLASS_NAME, "card-text.fw-bold1.mb-0").text.strip()
+
+                # Extract price without tax
+                price_without_tax = card.find_element(By.CLASS_NAME, "card-text.gal-preis-ek.gal_price_color.fw-600_1.fw-bold.mb-0").find_element(By.TAG_NAME, "span").text.strip()
+
+                # Append product details
+                all_products.append({
+                    "Name": product_name,
+                    "Selling Price": selling_price,
+                    "Price Without Tax": price_without_tax,
+                    "Category": category['name']
+                })
+            except Exception as e:
+                print(f"Error extracting product details: {e}")
+                continue
 
     # Save products to CSV
     with open("all_products.csv", "w", newline="", encoding="utf-8") as file:
