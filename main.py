@@ -38,6 +38,65 @@ def handle_human_verification(driver):
         # If the verification checkbox is not present, continue as normal
         print(f"No human verification checkbox found or other error: {e}")
 
+# Function to scrape products from a category, including pagination
+def scrape_category_products(driver, category_url):
+    wait = WebDriverWait(driver, 10)
+    pagenumber = 0
+    products = []
+    empty_pages = 0  # Counter for consecutive empty pages
+
+    while True:
+        # Construct the current page URL
+        current_url = f"{category_url}?sr={pagenumber}&show=list"
+        print(f"Scraping page: {current_url}")
+        driver.get(current_url)
+        time.sleep(2)
+
+        # Handle human verification
+        handle_human_verification(driver)
+
+        try:
+            # Wait for products to load
+            product_cards = wait.until(EC.presence_of_all_elements_located(
+                (By.CLASS_NAME, "col.d-flex.tgm-gal-box.mb-3")
+            ))
+            empty_pages = 0  # Reset the empty page counter when products are found
+        except Exception:
+            # No products on this page
+            print(f"No products found on page: {current_url}")
+            empty_pages += 1
+
+            # Check if we've hit 2 consecutive empty pages
+            if empty_pages >= 2:
+                print(f"2 consecutive empty pages. Moving to the next category.")
+                break
+
+            # Increment to the next page
+            pagenumber += 30
+            continue
+
+        # Scrape products
+        for card in product_cards:
+            try:
+                product_name = card.find_element(By.CLASS_NAME, "card-title.cut-text.pe-1.mb-0").find_element(By.CLASS_NAME, "green-color").text.strip()
+                selling_price = card.find_element(By.CLASS_NAME, "card-text.fw-bold1.mb-0").text.strip()
+                price_without_tax = card.find_element(By.CLASS_NAME, "card-text.gal-preis-ek.gal_price_color.fw-600_1.fw-bold.mb-0").find_element(By.TAG_NAME, "span").text.strip()
+
+                products.append({
+                    "Name": product_name,
+                    "Selling Price": selling_price,
+                    "Price Without Tax": price_without_tax
+                })
+            except Exception as e:
+                print(f"Error scraping product: {e}")
+
+        print(f"Scraped {len(product_cards)} products from page: {current_url}")
+
+        # Increment the page number
+        pagenumber += 30
+
+    return products
+
 # Main script
 try:
     # Initialize the WebDriver
@@ -102,41 +161,10 @@ try:
     all_products = []
     for category in categories:
         print(f"Scraping category: {category['name']} -> {category['url']}")
-
-        # Navigate to the category page
-        driver.get(category['url'])
-        time.sleep(3)  # Ensure the page has fully loaded
-
-        # Handle human verification dynamically
-        handle_human_verification(driver)
-
-        # Wait for product cards to load
-        product_cards = wait.until(EC.presence_of_all_elements_located(
-            (By.CLASS_NAME, "col.d-flex.tgm-gal-box.mb-3")
-        ))
-
-        # Scrape product details from the current page
-        for card in product_cards:
-            try:
-                # Extract product name
-                product_name = card.find_element(By.CLASS_NAME, "card-title.cut-text.pe-1.mb-0").find_element(By.CLASS_NAME, "green-color").text.strip()
-
-                # Extract selling price
-                selling_price = card.find_element(By.CLASS_NAME, "card-text.fw-bold1.mb-0").text.strip()
-
-                # Extract price without tax
-                price_without_tax = card.find_element(By.CLASS_NAME, "card-text.gal-preis-ek.gal_price_color.fw-600_1.fw-bold.mb-0").find_element(By.TAG_NAME, "span").text.strip()
-
-                # Append product details
-                all_products.append({
-                    "Name": product_name,
-                    "Selling Price": selling_price,
-                    "Price Without Tax": price_without_tax,
-                    "Category": category['name']
-                })
-            except Exception as e:
-                print(f"Error extracting product details: {e}")
-                continue
+        products = scrape_category_products(driver, category['url'])
+        for product in products:
+            product["Category"] = category["name"]  # Add category name to each product
+        all_products.extend(products)
 
     # Save products to CSV
     with open("all_products.csv", "w", newline="", encoding="utf-8") as file:
