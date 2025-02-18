@@ -1,86 +1,67 @@
-import pandas as pd
-import ftplib
-import requests
-import base64
 
-# === STEP 1: Load CSV File ===
-input_file = "testproducts1.csv"
-output_file = "all_products_wp.csv"
+import os
+import glob
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
 
-# Read CSV
-df = pd.read_csv(input_file)
+# Admin Credentials
+WP_ADMIN_URL = "https://motoguys.sk/wp-admin/"
+USERNAME = "mage_in4q9ldf"
+PASSWORD = "WbTZz@q$ib03hnh8"
 
-# === STEP 2: Transform Data for WP All Import ===
-rename_map = {
-    "Name": "post_title",
-    "Selling Price": "regular_price",
-    "Price Without Tax": "price_excl_tax",
-    "Category": "product_cat",
-}
+# Directory containing CSV files
+CSV_DIRECTORY = "C:/Users/mulle/Desktop/JASPRAVIM25/patricius12/LarsonX/latestproducts"
 
-# Rename columns
-df = df.rename(columns=rename_map)
+# get the latest CSV file
+def get_latest_csv(directory):
+    csv_files = glob.glob(os.path.join(directory, "*.csv"))
 
-# Add necessary WooCommerce fields
-df["post_status"] = "publish"  # Publish product
-df["post_type"] = "product"  # WooCommerce requires this
-df["sku"] = df["post_title"].str.replace(" ", "-").str.lower()  # Generate SKU
+    if not csv_files:
+        print("No CSV files found in the directory.")
+        return None
 
-# Save transformed file
-df.to_csv(output_file, index=False)
-print(f"Transformed file saved as: {output_file}")
+    latest_file = max(csv_files, key=os.path.getmtime)
+    print(f"Latest CSV File Selected: {latest_file}")
+    return latest_file
 
-# === STEP 3: Upload to WordPress via FTP (Optional) ===
-ftp_enabled = False  # Set to True to enable FTP upload
+# Find the latest CSV
+CSV_FILE_PATH = get_latest_csv(CSV_DIRECTORY)
 
-if ftp_enabled:
-    FTP_HOST = "your-ftp-host.com"
-    FTP_USER = "your-ftp-username"
-    FTP_PASS = "your-ftp-password"
-    FTP_PATH = "/wp-content/uploads/all_products_wp.csv"
+if CSV_FILE_PATH:  # Proceed only if a file is found
+    # Start Selenium WebDriver
+    driver = webdriver.Firefox()
 
-    ftp = ftplib.FTP(FTP_HOST)
-    ftp.login(FTP_USER, FTP_PASS)
+    try:
+        # Open WordPress Admin
+        driver.get(WP_ADMIN_URL)
+        time.sleep(2)
 
-    with open(output_file, "rb") as file:
-        ftp.storbinary(f"STOR {FTP_PATH}", file)
+        driver.find_element(By.ID, "user_login").send_keys(USERNAME)
+        driver.find_element(By.ID, "user_pass").send_keys(PASSWORD)
+        driver.find_element(By.ID, "wp-submit").click()
+        time.sleep(3)
 
-    ftp.quit()
-    print(f"File uploaded to: {FTP_PATH}")
+        # Navigate to Media Upload Page
+        driver.get("https://motoguys.sk/wp-admin/media-new.php")
+        time.sleep(2)
 
-# === STEP 4: Trigger WP All Import via API (Optional) ===
-wp_api_enabled = False  # Set to True to trigger WP All Import API
+        # Upload the latest CSV File
+        upload_input = driver.find_element(By.NAME, "async-upload")
+        upload_input.send_keys(CSV_FILE_PATH)  # Upload file
+        time.sleep(2)
 
-if wp_api_enabled:
-    WP_SITE = "https://motoguys.sk"
-    WP_ADMIN = "mage_in4q9ldf"
-    WP_PASSWORD = "WbTZz@q$ib03hnh8"
+        # Click
+        driver.find_element(By.ID, "html-upload").click()
+        time.sleep(5)
 
-    # Encode credentials
-    credentials = f"{WP_ADMIN}:{WP_PASSWORD}"
-    token = base64.b64encode(credentials.encode())
+        print("File uploaded successfully!")
 
-    headers = {"Authorization": f"Basic {token.decode('utf-8')}"}
+    except Exception as e:
+        print(f"Error: {e}")
 
-    # Upload CSV via API
-    upload_url = f"{WP_SITE}/wp-json/wp/v2/media"
+    finally:
+        driver.quit()
 
-    with open(output_file, "rb") as file:
-        response = requests.post(upload_url, headers=headers, files={"file": file})
-
-    if response.status_code == 201:
-        print("CSV uploaded successfully.")
-        media_id = response.json()["id"]
-
-        # Trigger WP All Import
-        import_url = f"{WP_SITE}/wp-json/wpai/v1/import/run"
-        import_response = requests.post(import_url, headers=headers, json={"import_id": media_id})
-
-        if import_response.status_code == 200:
-            print("WP All Import triggered successfully.")
-        else:
-            print("Failed to trigger WP All Import:", import_response.text)
-    else:
-        print("Failed to upload CSV:", response.text)
-
-print("Done! Go to WP All Import to start the import manually if needed.")
+else:
+    print("No CSV file found. Exiting.")
