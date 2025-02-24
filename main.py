@@ -11,11 +11,14 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
+from dotenv import load_dotenv
 
-# Credentials
-USERNAME = "601200"
-PASSWORD = "s2032ab15"
+load_dotenv()
 
+
+# Retrieve credentials
+USERNAME = os.getenv("MIKEUSERNAME")
+PASSWORD = os.getenv("MIKEPASSWORD")
 
 def initialize_driver():
     options = Options()
@@ -74,7 +77,7 @@ def scrape_category_products(driver, category_url):
                 delivery_date = card.find_element(By.CLASS_NAME, "color-inherit1.lh-1").text.strip()
                 product_state = card.find_element(By.CLASS_NAME, "bg-middle-gray.ps-1.pe-1").text.strip()
                 product_code = card.find_element(By.CLASS_NAME, "fw-bold").text.strip()
-                product_image = "https:" + card.find_element(By.CLASS_NAME,
+                product_image = card.find_element(By.CLASS_NAME,
                                                              "figure-img.img-fluid.m-0.height-100").get_attribute("src")
 
                 products.append({
